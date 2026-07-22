@@ -1,0 +1,112 @@
+name: Build & Deploy Jambo to o2switch (FTP)
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  # ─────────────────────────────────────────────
+  # JOB 1 : Build & deploy le frontend (Vite/React)
+  # ─────────────────────────────────────────────
+  deploy-frontend:
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1. Récupérer le code source
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # 2. Installer Node.js 20
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+
+      # 3. Installer les dépendances du frontend
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      # 4. Build Vite → produit les fichiers statiques dans frontend/dist/
+      - name: Build frontend
+        working-directory: frontend
+        run: npm run build
+        env:
+          # L'URL du backend Socket.io (Passenger écoute sur le sous-domaine)
+          VITE_BACKEND_URL: https://game.cdwfs.net
+
+      # 5. Déployer le dist/ dans la racine du sous-domaine via FTP
+      - name: Deploy frontend via FTP
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+        with:
+          server: ${{ secrets.FTP_SERVER }}
+          username: ${{ secrets.FTP_USERNAME }}
+          password: ${{ secrets.FTP_PASSWORD }}
+          local-dir: frontend/dist/
+          server-dir: /
+          dangerous-clean-slate: false
+
+  # ─────────────────────────────────────────────
+  # JOB 2 : Deploy le backend (Node.js + Passenger)
+  # ─────────────────────────────────────────────
+  deploy-backend:
+    runs-on: ubuntu-latest
+    needs: deploy-frontend   # On déploie le backend après le frontend
+
+    steps:
+      # 1. Récupérer le code source
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # 2. Installer Node.js 20 (nécessaire pour npm ci)
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: backend/package-lock.json
+
+      # 3. Préparer le dossier de déploiement du backend
+      - name: Prepare backend deployment folder
+        run: |
+          mkdir -p deploy-backend
+
+          # Copier tous les fichiers du backend (sauf node_modules)
+          cp -r backend/src               deploy-backend/src
+          cp    backend/server.js         deploy-backend/server.js
+          cp    backend/package.json      deploy-backend/package.json
+          cp    backend/package-lock.json deploy-backend/package-lock.json
+
+          # Créer le fichier restart.txt pour forcer le redémarrage Passenger
+          mkdir -p deploy-backend/tmp
+          touch    deploy-backend/tmp/restart.txt
+
+          # Créer le .env de production avec les vraies variables d'environnement
+          printf 'PORT=4000\nPGHOST=localhost\nPGPORT=5432\nPGDATABASE=%s\nPGUSER=%s\nPGPASSWORD=%s\nJWT_SECRET=%s\nNODE_ENV=production\n' \
+            "${{ secrets.DB_NAME }}" \
+            "${{ secrets.DB_USER }}" \
+            "${{ secrets.DB_PASSWORD }}" \
+            "${{ secrets.JWT_SECRET }}" \
+            > deploy-backend/.env
+
+      # 4. Installer les dépendances de PRODUCTION dans le dossier de déploiement.
+      #    ⚠️  o2switch ne donne pas accès SSH → on ne peut PAS lancer "npm install"
+      #    directement sur le serveur. On installe donc node_modules ici, dans le
+      #    runner GitHub Actions (Linux), et on les uploade via FTP avec le reste.
+      - name: Install production dependencies (for upload)
+        working-directory: deploy-backend
+        run: npm ci --omit=dev
+
+      # 5. Déployer le backend complet (source + node_modules) dans /backend/ via FTP
+      - name: Deploy backend via FTP
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+        with:
+          server: ${{ secrets.FTP_SERVER }}
+          username: ${{ secrets.FTP_USERNAME }}
+          password: ${{ secrets.FTP_PASSWORD }}
+          local-dir: deploy-backend/
+          server-dir: /backend/
+          dangerous-clean-slate: false
