@@ -109,4 +109,4 @@ jobs:
       - name: Deploy backend via lftp
         run: |
           sudo apt-get update && sudo apt-get install -y lftp
-          lftp -c "open -u ${{ secrets.FTP_USERNAME }},${{ secrets.FTP_PASSWORD }} ftp://${{ secrets.FTP_SERVER }}; mirror -R --verbose deploy-backend/ /backend/"
+          lftp -c "set ssl:verify-certificate no; open -u ${{ secrets.FTP_USERNAME }},${{ secrets.FTP_PASSWORD }} ftp://${{ secrets.FTP_SERVER }}; mirror -R --verbose deploy-backend/ /backend/"
