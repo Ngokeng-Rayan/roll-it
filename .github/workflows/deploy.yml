@@ -92,6 +92,11 @@ jobs:
             "${{ secrets.JWT_SECRET }}" \
             > deploy-backend/.env
 
+          # IMPORTANT: L'action FTP ignore "node_modules" par défaut.
+          # On crée un fichier .ftpignore personnalisé pour forcer l'upload.
+          echo ".git" > deploy-backend/.ftpignore
+          echo ".github" >> deploy-backend/.ftpignore
+
       # 4. Installer les dépendances de PRODUCTION dans le dossier de déploiement.
       #    ⚠️  o2switch ne donne pas accès SSH → on ne peut PAS lancer "npm install"
       #    directement sur le serveur. On installe donc node_modules ici, dans le
