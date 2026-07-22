@@ -106,12 +106,7 @@ jobs:
         run: npm ci --omit=dev
 
       # 5. Déployer le backend complet (source + node_modules) dans /backend/ via FTP
-      - name: Deploy backend via FTP
-        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
-        with:
-          server: ${{ secrets.FTP_SERVER }}
-          username: ${{ secrets.FTP_USERNAME }}
-          password: ${{ secrets.FTP_PASSWORD }}
-          local-dir: deploy-backend/
-          server-dir: /backend/
-          dangerous-clean-slate: false
+      - name: Deploy backend via lftp
+        run: |
+          sudo apt-get update && sudo apt-get install -y lftp
+          lftp -c "open -u ${{ secrets.FTP_USERNAME }},${{ secrets.FTP_PASSWORD }} ftp://${{ secrets.FTP_SERVER }}; mirror -R --verbose deploy-backend/ /backend/"
