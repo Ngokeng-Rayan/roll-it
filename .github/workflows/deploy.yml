@@ -92,21 +92,13 @@ jobs:
             "${{ secrets.JWT_SECRET }}" \
             > deploy-backend/.env
 
-          # IMPORTANT: L'action FTP ignore "node_modules" par défaut.
-          # On crée un fichier .ftpignore personnalisé pour forcer l'upload.
-          echo ".git" > deploy-backend/.ftpignore
-          echo ".github" >> deploy-backend/.ftpignore
-
-      # 4. Installer les dépendances de PRODUCTION dans le dossier de déploiement.
-      #    ⚠️  o2switch ne donne pas accès SSH → on ne peut PAS lancer "npm install"
-      #    directement sur le serveur. On installe donc node_modules ici, dans le
-      #    runner GitHub Actions (Linux), et on les uploade via FTP avec le reste.
-      - name: Install production dependencies (for upload)
-        working-directory: deploy-backend
-        run: npm ci --omit=dev
-
-      # 5. Déployer le backend complet (source + node_modules) dans /backend/ via FTP
-      - name: Deploy backend via lftp
-        run: |
-          sudo apt-get update && sudo apt-get install -y lftp
-          lftp -c "set ssl:verify-certificate no; open -u ${{ secrets.FTP_USERNAME }},${{ secrets.FTP_PASSWORD }} ftp://${{ secrets.FTP_SERVER }}; mirror -R --verbose deploy-backend/ /backend/"
+      # 4. Déployer le backend (sans node_modules) dans /backend/ via FTP
+      - name: Deploy backend via FTP
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+        with:
+          server: ${{ secrets.FTP_SERVER }}
+          username: ${{ secrets.FTP_USERNAME }}
+          password: ${{ secrets.FTP_PASSWORD }}
+          local-dir: deploy-backend/
+          server-dir: /backend/
+          dangerous-clean-slate: false
