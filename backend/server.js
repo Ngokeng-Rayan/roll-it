@@ -5,7 +5,8 @@
  * sur le port défini par la variable d'environnement PORT.
  * Si PORT n'est pas défini, on utilise 4000 (développement local).
  */
-require('dotenv').config();
+const path = require('path');
+require('dotenv').config({ path: path.join(__dirname, '.env') });
 const express = require('express');
 const http = require('http');
 const cors = require('cors');
@@ -57,13 +58,13 @@ io.on('connection', (socket) => {
 // En local, on utilise 4000.
 const PORT = process.env.PORT || 4000;
 
-migrate()
-  .then(() => {
-    server.listen(PORT, () => {
-      console.log(`🎲 Jambo server listening on port ${PORT}`);
-    });
-  })
-  .catch((err) => {
-    console.error('Failed to start server:', err.message);
-    process.exit(1);
-  });
+// On démarre le serveur d'abord, puis on tente la migration.
+// Cela évite que Passenger voie un crash si la BDD est lente à répondre.
+server.listen(PORT, () => {
+  console.log(`🎲 Jambo server listening on port ${PORT}`);
+
+  // Migration en arrière-plan — une erreur ne tue plus le process
+  migrate()
+    .then(() => console.log('[DB] Migration OK'))
+    .catch((err) => console.error('[DB] Migration failed (server still running):', err.message));
+});
